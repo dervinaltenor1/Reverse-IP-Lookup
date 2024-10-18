@@ -1,0 +1,5 @@
+/.venv
+/config.py
+/reverse_ip.log
+/reverse_ip_lookup.json
+/whois_lookup.json
