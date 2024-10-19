@@ -6,6 +6,7 @@ import datetime
 import whois
 import logging
 from sqlite3 import Connection, Cursor
+from datetime import date
 from config import DATABASE_FILE, REVERSE_LOOKUP_JSON, WHOIS_JSON, TIME_BETWEEN_REQUESTS
 
 
@@ -19,6 +20,8 @@ def setup_logger() -> None:
 setup_logger()
 
 TARGET_KEYS: set[str] = {'updated_date', 'creation_date', 'expiration_date'}
+CURRENT_DATE: str = date.today().isoformat()
+start_time = time.time()
 
 def run_whois(ip_address: str, whois_data_list: list[dict]) -> None:
     """Perform a WHOIS lookup for the given IP address."""
@@ -100,14 +103,16 @@ def save_to_json(data_list: list[dict], file: str) -> None:
         # Convert dates if saving WHOIS data
         data_list = convert_dates(data_list)
 
-    logging.info(f"Attempting to save to json file: {file}")
+    logging.info(f"Attempting to save to json file: {CURRENT_DATE} {file}")
+
+    file = f'{CURRENT_DATE}_{file}'
 
     try:
         # Open the file for writing
         with open(file, 'w') as json_file:
             # Write the JSON data
             json.dump(data_list, json_file, indent=4)
-            logging.info(f"Succesfully saved to json file: {file}")
+            logging.info(f"Succesfully saved to json file: {CURRENT_DATE} {file}")
     except Exception as e:
         logging.error(f"Couldnt save to json file: {e}")
 
@@ -139,6 +144,28 @@ def convert_datetime(dt):
         return dt.isoformat() # Convert to ISO format
     return dt # Return the original value if it's not a datetime
 
+def clear_db() -> None:
+    conn: Connection = None
+    logging.info("Attempting to open database to delete stored IPS...")
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        logging.info("Succesfully connected to database.")
+
+        cursor: Cursor = conn.cursor()
+
+        # Delete all rows from the table
+        cursor.execute("DELETE FROM malicious_ips;")
+        logging.info("Succesfully deleted IPS from database.")
+
+        # Commit the changes
+        conn.commit()
+
+    except Exception as e:
+        logging.error(f"Error deleting IPS from database: {e}")
+    finally:
+        if conn:
+            conn.close()
+            logging.info("Closed SQLite connection")
 
 def main() -> None:
     logging.info("Starting reverse IP searching")
@@ -167,7 +194,11 @@ def main() -> None:
 
         # Save WHOIS results to JSON
         save_to_json(whois_data_list, WHOIS_JSON)
+        clear_db()
+        end_time = time.time()
+        execution_time = end_time - start_time  # Calculate the difference
         logging.info("Finished reverse searching and creating json files")
+        logging.info(f"Execution time: {execution_time} seconds")
 
     except Exception as e:
         logging.error(f"Unexpected error occured: {e}")
